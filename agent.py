@@ -9,12 +9,20 @@ import re
 
 import config
 import trace
+
 from tools import (
     search_listings,
     suggest_outfit,
     create_fit_card,
     compare_prices,
 )
+
+from style_memory import (
+    load_style_memory,
+    merge_wardrobes,
+    save_item_to_memory,
+)
+
 from generate import ModelUnavailable
 
 
@@ -95,7 +103,7 @@ def parse_query(query: str) -> dict:
             + description[size_match.end():]
         )
 
-    # Remove common request words that are not useful search terms.
+    # Remove common request words that do not help the search.
     description = re.sub(
         r"\b(looking for|find me|show me|i want|i need|a|an)\b",
         " ",
@@ -103,7 +111,7 @@ def parse_query(query: str) -> dict:
         flags=re.IGNORECASE,
     )
 
-    # Clean up extra spaces and punctuation.
+    # Clean up spaces and punctuation.
     description = re.sub(r"\s+", " ", description)
     description = description.strip(" ,.-")
 
@@ -121,7 +129,19 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Run the FitFindr planning loop once and return the completed session.
     """
 
-    session = new_session(query, wardrobe)
+    # Load items remembered from previous runs.
+    saved_wardrobe = load_style_memory()
+
+    # Combine saved items with the wardrobe supplied for this run.
+    combined_wardrobe = merge_wardrobes(
+        wardrobe,
+        saved_wardrobe,
+    )
+
+    session = new_session(
+        query,
+        combined_wardrobe,
+    )
 
     step = "parse"
     iteration_count = 0
@@ -130,13 +150,16 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         iteration_count += 1
         trace.check_iterations(iteration_count)
 
-        # ── Step 1: Parse query ────────────────────────────────────────────────
+        # ── Step 1: Parse query ───────────────────────────────────────────────
 
         if step == "parse":
-            session["parsed"] = parse_query(session["query"])
+            session["parsed"] = parse_query(
+                session["query"]
+            )
+
             step = "search"
 
-        # ── Step 2: Search listings ───────────────────────────────────────────
+        # ── Step 2: Search listings ──────────────────────────────────────────
 
         elif step == "search":
             parsed = session["parsed"]
@@ -159,10 +182,14 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 step = "done"
                 continue
 
-            session["selected_item"] = session["search_results"][0]
+            # Start with the highest-ranked search result.
+            session["selected_item"] = (
+                session["search_results"][0]
+            )
+
             step = "compare_price"
 
-        # ── Step 3: Compare prices ────────────────────────────────────────────
+        # ── Step 3: Compare prices ───────────────────────────────────────────
 
         elif step == "compare_price":
             session["price_comparison"] = compare_prices(
@@ -173,8 +200,8 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             comparison = session["price_comparison"]
 
             # STRETCH BRANCH:
-            # If the selected item costs more than the average comparable
-            # listing, switch to the cheapest comparable option.
+            # If the selected item is above the average price,
+            # switch to the cheapest comparable listing.
             if comparison["assessment"] == "above_average":
                 cheapest_item = comparison["cheapest_item"]
 
@@ -187,7 +214,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
             step = "suggest_outfit"
 
-        # ── Step 4: Suggest outfit ────────────────────────────────────────────
+        # ── Step 4: Suggest outfit ───────────────────────────────────────────
 
         elif step == "suggest_outfit":
             session["outfit_suggestion"] = suggest_outfit(
@@ -197,12 +224,18 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
             step = "create_fit_card"
 
-        # ── Step 5: Create fit card ───────────────────────────────────────────
+        # ── Step 5: Create fit card ──────────────────────────────────────────
 
         elif step == "create_fit_card":
             session["fit_card"] = create_fit_card(
                 session["outfit_suggestion"],
                 session["selected_item"],
+            )
+
+            # STRETCH FEATURE:
+            # Save the successful selected item so future runs remember it.
+            save_item_to_memory(
+                session["selected_item"]
             )
 
             step = "done"
@@ -215,10 +248,12 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 def _show(session: dict) -> None:
     if session["error"]:
         print(f"  stopped: {session['error']}")
+
         print(
             f"  fit_card is {session['fit_card']!r} "
             "— it should still be None here"
         )
+
         return
 
     item = session["selected_item"] or {}
@@ -241,8 +276,13 @@ def _show(session: dict) -> None:
             f"{comparison.get('assessment')}"
         )
 
-    print(f"  outfit:   {session['outfit_suggestion']}")
-    print(f"  fit card: {session['fit_card']}")
+    print(
+        f"  outfit:   {session['outfit_suggestion']}"
+    )
+
+    print(
+        f"  fit card: {session['fit_card']}"
+    )
 
 
 if __name__ == "__main__":

@@ -378,5 +378,15 @@ FitFindr will remember wardrobe items between runs. Items saved during one run
 will be available during future runs so later outfit suggestions can use the
 user's previously stored wardrobe.
 
+FitFindr stores successful selected items in `data/style_memory.json`. A listing
+is converted into the same structure used by the wardrobe data, including its
+name, category, colors, style tags, and a note containing its price and
+platform.
+
+At the beginning of a later run, `agent.py::run_agent` loads the saved memory
+and merges it with the wardrobe provided to the agent. Duplicate saved items
+are ignored by ID. This means an item discovered during one run can influence
+the outfit recommendations generated during a future run.
+
 ---
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
