@@ -78,6 +78,13 @@
 - **Returns:** A `str` containing a two-to-four sentence caption that mentions the item, its price, its platform, and the overall outfit vibe.
 - **When it has nothing:** If `outfit` is empty or whitespace, it returns a descriptive message instead of calling the model or raising an error.
 
+### `compare_prices`
+
+- **What it does:** Compares the selected item's price with similar matching listings in the same category.
+- **Inputs:** `selected_item` (`dict`), `matches` (`list[dict]`)
+- **Returns:** A `dict` containing the selected item's price, the average price of comparable listings, the cheapest comparable listing, and an assessment of whether the selected item is above, below, or equal to the average price.
+- **When it has nothing:** If no comparable listings are available, it returns a dictionary with no average price and keeps the selected item as the comparison result.
+
 ---
 
 ## Planning Loop

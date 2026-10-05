@@ -185,3 +185,50 @@ Requirements:
 """
 
     return generate(prompt).strip()
+
+# ── Tool 4: compare_prices ────────────────────────────────────────────────────
+
+def compare_prices(selected_item: dict, matches: list[dict]) -> dict:
+    """
+    Compare the selected item's price with similar matching listings.
+
+    Only listings in the same category as the selected item are compared.
+    """
+
+    comparable_items = [
+        listing
+        for listing in matches
+        if listing.get("category") == selected_item.get("category")
+    ]
+
+    if not comparable_items:
+        return {
+            "selected_price": selected_item.get("price"),
+            "average_price": None,
+            "cheapest_item": selected_item,
+            "assessment": "no_comparison",
+        }
+
+    prices = [listing["price"] for listing in comparable_items]
+    average_price = sum(prices) / len(prices)
+
+    cheapest_item = min(
+        comparable_items,
+        key=lambda listing: listing["price"],
+    )
+
+    selected_price = selected_item["price"]
+
+    if selected_price > average_price:
+        assessment = "above_average"
+    elif selected_price < average_price:
+        assessment = "below_average"
+    else:
+        assessment = "average"
+
+    return {
+        "selected_price": selected_price,
+        "average_price": round(average_price, 2),
+        "cheapest_item": cheapest_item,
+        "assessment": assessment,
+    }
