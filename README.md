@@ -330,5 +330,25 @@ full. -->
      ═════════════════════════════════════════════════════════════════════ -->
 
 ---
+## Stretch Features
 
+I plan to implement all three Unit 3 stretch features:
+
+### Fourth Tool — Price Comparison
+FitFindr will include a fourth tool that compares the prices of matching
+listings. It will return information about how the selected item's price
+compares with the other matching listings.
+
+### Second Branch — Price Comparison
+The planning loop will include a second condition in addition to the required
+empty-search branch. If the selected listing is more expensive than the other
+matching options, FitFindr will take a different path and consider the cheaper
+listing before continuing with the outfit recommendation.
+
+### Style Memory
+FitFindr will remember wardrobe items between runs. Items saved during one run
+will be available during future runs so later outfit suggestions can use the
+user's previously stored wardrobe.
+
+---
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
