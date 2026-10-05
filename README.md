@@ -102,11 +102,32 @@
 
 **Branch rule:**
 
+If `search_listings` returns an empty list, the agent stores a helpful message
+in `session["error"]` and stops before calling `suggest_outfit`. Otherwise, it
+selects the first search result and sends it to the price comparison step.
+
+The second branch occurs after `compare_prices`. If the selected listing is
+priced above the average price of comparable listings in the same category,
+the agent switches `session["selected_item"]` to the cheapest comparable
+listing. Otherwise, it keeps the original selected listing.
+
+After the branches are complete, the selected item is passed through the
+session to `suggest_outfit`, and the resulting outfit is then passed through
+the session to `create_fit_card`.
+
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** The query is parsed with regular expressions.
+The parser extracts phrases such as `under $30` into `max_price` and
+`size M` into `size`. The remaining words are used as the listing description.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** The query is stored first, followed by the
+parsed description, size, and maximum price. Search results are stored in
+`session["search_results"]`, the chosen listing is stored in
+`session["selected_item"]`, the price comparison is stored in
+`session["price_comparison"]`, the outfit is stored in
+`session["outfit_suggestion"]`, and the final caption is stored in
+`session["fit_card"]`.
 
 ---
 
