@@ -39,7 +39,9 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "search_results": [],
         "selected_item": None,
         "price_comparison": None,
+        "price_branch_taken": False,
         "wardrobe": wardrobe,
+        "memory_items_loaded": [],
         "outfit_suggestion": None,
         "fit_card": None,
         "error": None,
@@ -124,9 +126,17 @@ def parse_query(query: str) -> dict:
 
 # ── planning loop ─────────────────────────────────────────────────────────────
 
-def run_agent(query: str, wardrobe: dict) -> dict:
+def run_agent(
+    query: str,
+    wardrobe: dict,
+    save_memory: bool = True,
+) -> dict:
     """
     Run the FitFindr planning loop once and return the completed session.
+
+    save_memory controls whether a successful run permanently stores the
+    selected item. Evaluation runs can set it to False so repeated tests
+    do not change persistent style memory.
     """
 
     # Load items remembered from previous runs.
@@ -142,6 +152,12 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         query,
         combined_wardrobe,
     )
+
+    # Keep track of which saved items were loaded for this run.
+    session["memory_items_loaded"] = [
+        item.get("name")
+        for item in saved_wardrobe.get("items", [])
+    ]
 
     step = "parse"
     iteration_count = 0
@@ -211,32 +227,54 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                     != session["selected_item"]["id"]
                 ):
                     session["selected_item"] = cheapest_item
+                    session["price_branch_taken"] = True
 
             step = "suggest_outfit"
 
         # ── Step 4: Suggest outfit ───────────────────────────────────────────
 
         elif step == "suggest_outfit":
-            session["outfit_suggestion"] = suggest_outfit(
-                session["selected_item"],
-                session["wardrobe"],
-            )
+            try:
+                session["outfit_suggestion"] = suggest_outfit(
+                    session["selected_item"],
+                    session["wardrobe"],
+                )
+
+            except ModelUnavailable:
+                session["error"] = (
+                    "The model is temporarily unavailable, so I couldn't "
+                    "generate an outfit suggestion. Please try again."
+                )
+
+                step = "done"
+                continue
 
             step = "create_fit_card"
 
         # ── Step 5: Create fit card ──────────────────────────────────────────
 
         elif step == "create_fit_card":
-            session["fit_card"] = create_fit_card(
-                session["outfit_suggestion"],
-                session["selected_item"],
-            )
+            try:
+                session["fit_card"] = create_fit_card(
+                    session["outfit_suggestion"],
+                    session["selected_item"],
+                )
+
+            except ModelUnavailable:
+                session["error"] = (
+                    "The model is temporarily unavailable, so I couldn't "
+                    "create the fit card. Please try again."
+                )
+
+                step = "done"
+                continue
 
             # STRETCH FEATURE:
-            # Save the successful selected item so future runs remember it.
-            save_item_to_memory(
-                session["selected_item"]
-            )
+            # Save the selected item only when persistent memory is enabled.
+            if save_memory:
+                save_item_to_memory(
+                    session["selected_item"]
+                )
 
             step = "done"
 
@@ -274,6 +312,18 @@ def _show(session: dict) -> None:
         print(
             f"  price assessment: "
             f"{comparison.get('assessment')}"
+        )
+
+    if session["price_branch_taken"]:
+        print(
+            "  branch:   above_average branch taken — "
+            f"switched to {item.get('title')} at ${item.get('price')}"
+        )
+
+    if session["memory_items_loaded"]:
+        print(
+            "  memory:   loaded "
+            + ", ".join(session["memory_items_loaded"])
         )
 
     print(

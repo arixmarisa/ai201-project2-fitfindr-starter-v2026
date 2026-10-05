@@ -415,10 +415,10 @@ It returns the selected item's price, the average price of comparable listings,
 the cheapest comparable listing, and an assessment of whether the selected item
 is above, below, or equal to the average price.
 
-During testing with `vintage jeans`, the selected Vintage Levi's 501 Jeans cost
-$38.00 while the comparable average was $34.00. The tool returned
-`above_average` and identified the $30.00 Straight Leg Black Jeans as the
-cheapest comparable option.
+During the normal agent run, `compare_prices` is called after a listing is
+selected and before the outfit is generated. The successful sample run shows
+the result of this tool through the selected price, average price, and price
+assessment.
 
 ### Second Branch — Price Comparison
 
@@ -428,22 +428,14 @@ If the selected item's price is above the average price of comparable listings,
 FitFindr replaces `session["selected_item"]` with the cheapest comparable item.
 Otherwise, it keeps the original selected item.
 
-The `vintage jeans` run triggered this branch because the initially selected
-$38.00 Levi's jeans were above the $34.00 average, so FitFindr selected the
-$30.00 Straight Leg Black Jeans instead.
+**Run showing the `above_average` branch was taken:**
 
-### Style Memory
-
-FitFindr remembers selected items between runs using
-`data/style_memory.json`.
-
-After a successful run, the selected listing is saved in the same structure as
-a wardrobe item. At the beginning of a later run, `agent.py::run_agent` loads
-the saved memory and merges it with the provided wardrobe.
-
-In the first test run, FitFindr saved the Y2K Baby Tee — Butterfly Print.
-During the second run, that saved item was loaded into the wardrobe automatically
-without the user entering it again. Duplicate saved items are ignored by ID.
+```text
+Price assessment: above_average
+Branch taken: True
+Original selected price: 38.0
+Final selected item: Straight Leg Black Jeans — Faded
+Final selected price: 30.0
 
 ---
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
