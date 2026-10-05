@@ -1,5 +1,7 @@
 # FitFindr
 
+Arianna Mekovich
+
 > ### 👋 Start here
 >
 > **New to this repo? Read [RUNNING.md](RUNNING.md) first** — setup, every
@@ -41,7 +43,13 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
-
+FitFindr is a multi-tool shopping and styling agent that helps a user search thrift
+listings using a plain-language request such as `vintage graphic tee under $30`.
+The agent searches the available listings, compares prices between similar items,
+and selects an item to continue with. It then uses the user's wardrobe to suggest
+outfits and generates a short fit-card caption containing information about the
+selected listing. FitFindr also remembers successfully selected items between
+runs so they can become part of the user's wardrobe for future outfit suggestions.
 
 ---
 
@@ -140,27 +148,63 @@ parsed description, size, and maximum price. Search results are stored in
 
 **One full query**
 
-```
-$ python app.py ask '...'
+```text
+$ python agent.py
 
-```
+=== A query the data can match ===
+  found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+  price:    $18.0 selected / $20.57 average
+  price assessment: below_average
+  outfit:   Here are two great ways to style the Y2K baby tee using pieces already in your wardrobe:
 
-**The three tools, tested one at a time**
+**Outfit 1: Classic Y2K Streetwear**
+*   **Bottoms:** Baggy straight-leg jeans (dark wash)
+*   **Outerwear:** Black cropped zip hoodie (worn open or layered over top)
+*   **Shoes:** Chunky white sneakers
+*   **Accessories:** Black crossbody bag
+*   *Why it works:* The fitted silhouette of the baby tee balances the volume of the baggy jeans, leaning fully into the Y2K aesthetic.
 
-```
+**Outfit 2: High-Low Contrast**
+*   **Bottoms:** Wide-leg khaki trousers
+*   **Outerwear:** Vintage black denim jacket
+*   **Shoes:** Black combat boots
+*   **Accessories:** Brown leather belt and black crossbody bag
+*   *Why it works:* Pairing the sweet, graphic butterfly tee with structured earth-toned trousers and edgy boots creates a cool, balanced contrast between cottagecore and streetwear.
+
+  fit card: Channel your inner 2000s pop star with this adorable butterfly print Y2K baby tee! It gives the ultimate sweet-yet-edgy nostalgic vibe and is up for grabs on Depop for just $18.00. Grab it before it’s gone and level up your streetwear rotation! 🦋✨
+
+=== A query it can't ===
+  stopped: I couldn't find a matching listing. Try using fewer description words, choosing a different size, or increasing your maximum price.
+  fit_card is None — it should still be None here
+
+The second one should stop before the fit card. If both paths look the same,
+the branch isn't doing anything yet.
+
+## search_listings
+
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
 
-```
+Returned matching listings including:
+- Y2K Baby Tee — Butterfly Print — $18.00
+- Graphic Tee — 2003 Tour Bootleg Style — $24.00
+- Vintage Band Tee — Faded Grey — $19.00
 
-```
-$ python -c "from tools import suggest_outfit; ..."
+## suggest_outfit
 
-```
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
 
-```
-$ python -c "from tools import create_fit_card; ..."
+Returned two outfit suggestions using the Vintage Levi's 501 Jeans and pieces
+from the example wardrobe, including a white ribbed tank, vintage black denim
+jacket, chunky white sneakers, and black combat boots.
 
-```
+## create_fit_card
+
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('Pair these jeans with a fitted white tee and sneakers for a casual streetwear look.', load_listings()[0]))"
+
+Nothing beats the fit of true vintage Levi's 501s, and this medium wash pair is
+an absolute dream. Throw them on with a crisp white tee and your favorite
+sneakers for the ultimate effortless streetwear look. Grab these beauties now
+for just $38.00 before they're gone. Head over to my Depop to shop!
 
 ---
 
@@ -175,15 +219,15 @@ $ python -c "from tools import create_fit_card; ..."
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+*What I asked for:* I used AI to review the design for search_listings and help determine a simple way to rank listings while still supporting the required description, size, and maximum-price filters.
+*What came back:* The suggested implementation tokenized the user's description and listing fields, counted overlapping keywords, filtered out zero-score results, and ranked the remaining listings by their scores.
+*What I changed:* While testing the search, I kept the keyword-overlap approach but added safer size matching instead of using a basic substring comparison. This prevents values such as S from accidentally matching unrelated sizes such as US 9.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+*What I asked for:* I used AI to review my fourth-tool price comparison idea and the second planning-loop branch.
+*What came back:* The first version compared the selected listing against every search result. Testing vintage jeans caused a $18 baby tee to become the cheapest result because it also contained the word vintage.
+*What I changed:* I changed compare_prices so it only compares listings in the same category as the selected item. After the change, the $38 Levi's jeans were compared against other bottoms, producing an average price of $34.00 and identifying $30 black jeans as the cheaper comparable listing.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
@@ -363,30 +407,43 @@ full. -->
 I plan to implement all three Unit 3 stretch features:
 
 ### Fourth Tool — Price Comparison
-FitFindr will include a fourth tool that compares the prices of matching
-listings. It will return information about how the selected item's price
-compares with the other matching listings.
+
+FitFindr includes a fourth tool named `compare_prices`. It compares the selected
+item with matching listings in the same category.
+
+It returns the selected item's price, the average price of comparable listings,
+the cheapest comparable listing, and an assessment of whether the selected item
+is above, below, or equal to the average price.
+
+During testing with `vintage jeans`, the selected Vintage Levi's 501 Jeans cost
+$38.00 while the comparable average was $34.00. The tool returned
+`above_average` and identified the $30.00 Straight Leg Black Jeans as the
+cheapest comparable option.
 
 ### Second Branch — Price Comparison
-The planning loop will include a second condition in addition to the required
-empty-search branch. If the selected listing is more expensive than the other
-matching options, FitFindr will take a different path and consider the cheaper
-listing before continuing with the outfit recommendation.
+
+The planning loop includes a second branch after `compare_prices`.
+
+If the selected item's price is above the average price of comparable listings,
+FitFindr replaces `session["selected_item"]` with the cheapest comparable item.
+Otherwise, it keeps the original selected item.
+
+The `vintage jeans` run triggered this branch because the initially selected
+$38.00 Levi's jeans were above the $34.00 average, so FitFindr selected the
+$30.00 Straight Leg Black Jeans instead.
 
 ### Style Memory
-FitFindr will remember wardrobe items between runs. Items saved during one run
-will be available during future runs so later outfit suggestions can use the
-user's previously stored wardrobe.
 
-FitFindr stores successful selected items in `data/style_memory.json`. A listing
-is converted into the same structure used by the wardrobe data, including its
-name, category, colors, style tags, and a note containing its price and
-platform.
+FitFindr remembers selected items between runs using
+`data/style_memory.json`.
 
-At the beginning of a later run, `agent.py::run_agent` loads the saved memory
-and merges it with the wardrobe provided to the agent. Duplicate saved items
-are ignored by ID. This means an item discovered during one run can influence
-the outfit recommendations generated during a future run.
+After a successful run, the selected listing is saved in the same structure as
+a wardrobe item. At the beginning of a later run, `agent.py::run_agent` loads
+the saved memory and merges it with the provided wardrobe.
+
+In the first test run, FitFindr saved the Y2K Baby Tee — Butterfly Print.
+During the second run, that saved item was loaded into the wardrobe automatically
+without the user entering it again. Duplicate saved items are ignored by ID.
 
 ---
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
