@@ -437,5 +437,20 @@ Original selected price: 38.0
 Final selected item: Straight Leg Black Jeans — Faded
 Final selected price: 30.0
 
+## Unit 4 — Planned Stretch Features
+
+I plan to complete all three optional stretch features.
+
+### Stretch 1: Second MCP Tool (+1)
+In addition to `search_listings`, I will expose a second existing tool through MCP. I will update the agent to call both tools through the MCP client and document their inputs, outputs, and execution traces.
+
+### Stretch 2: Retry With Looser Constraints (+1)
+If a search returns no listings, the agent will retry exactly once without the size filter. The trace and run output will identify the constraint removed. If no matching listings are found after the retry, the agent will stop with an actionable message.
+
+### Stretch 3: Second Measured Improvement (+2)
+After reviewing the initial evaluation results, I will identify two specific weaknesses in the agent. I will implement and measure each improvement separately, producing three comparable run logs: before, after the first improvement, and after the second improvement.
+
+I will preserve the original acceptance criteria and report the actual results, including unsuccessful tests.
+
 ---
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
