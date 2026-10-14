@@ -1,3 +1,4 @@
+
 """
 The FitFindr planning loop.
 
@@ -10,11 +11,10 @@ import re
 import config
 import trace
 
+from mcp_client import call_tool, MCPError
 from tools import (
-    search_listings,
     suggest_outfit,
     create_fit_card,
-    compare_prices,
 )
 
 from style_memory import (
@@ -32,7 +32,6 @@ def new_session(query: str, wardrobe: dict) -> dict:
     """
     Create a fresh session for one user interaction.
     """
-
     return {
         "query": query,
         "parsed": {},
@@ -45,6 +44,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,
         "fit_card": None,
         "error": None,
+        "retry_dropped_constraint": None,
     }
 
 
@@ -138,7 +138,6 @@ def run_agent(
     selected item. Evaluation runs can set it to False so repeated tests
     do not change persistent style memory.
     """
-
     # Load items remembered from previous runs.
     saved_wardrobe = load_style_memory()
 
@@ -167,24 +166,74 @@ def run_agent(
         trace.check_iterations(iteration_count)
 
         # ── Step 1: Parse query ───────────────────────────────────────────────
-
         if step == "parse":
             session["parsed"] = parse_query(
                 session["query"]
             )
 
+            trace.step(
+                "parse_query",
+                inputs={"query": session["query"]},
+                returned=session["parsed"],
+            )
+
             step = "search"
 
         # ── Step 2: Search listings ──────────────────────────────────────────
-
         elif step == "search":
             parsed = session["parsed"]
+            search_inputs = {
+                "description": parsed["description"],
+                "size": parsed["size"],
+                "max_price": parsed["max_price"],
+            }
 
-            session["search_results"] = search_listings(
-                description=parsed["description"],
-                size=parsed["size"],
-                max_price=parsed["max_price"],
-            )
+            try:
+                # UNIT 4: Search listings through the MCP server.
+                session["search_results"] = call_tool(
+                    "search_listings", search_inputs
+                )
+                trace.step(
+                    "search_listings (via MCP)",
+                    inputs=search_inputs,
+                    returned=session["search_results"],
+                )
+
+                # UNIT 4 STRETCH: Retry once without the size filter.
+                if not session["search_results"] and parsed["size"] is not None:
+                    session["retry_dropped_constraint"] = (
+                        f"size={parsed['size']}"
+                    )
+                    retry_inputs = {
+                        "description": parsed["description"],
+                        "size": None,
+                        "max_price": parsed["max_price"],
+                    }
+                    print(
+                        "No matching listings found. "
+                        f"Retrying without size {parsed['size']}."
+                    )
+                    session["search_results"] = call_tool(
+                        "search_listings", retry_inputs
+                    )
+                    trace.step(
+                        "search_listings retry (via MCP)",
+                        inputs=retry_inputs,
+                        returned=session["search_results"],
+                        note=f"Dropped size constraint: {parsed['size']}",
+                    )
+            except MCPError as exc:
+                session["error"] = (
+                    "The listing search tool couldn't be reached through MCP. "
+                    f"Details: {exc}. Please check the MCP server and try again."
+                )
+                trace.step(
+                    "search_listings (via MCP) error",
+                    inputs=search_inputs,
+                    note=str(exc),
+                )
+                step = "done"
+                continue
 
             # REQUIRED BRANCH:
             # Stop if search_listings returned nothing.
@@ -194,7 +243,11 @@ def run_agent(
                     "description words, choosing a different size, or "
                     "increasing your maximum price."
                 )
-
+                trace.step(
+                    "empty_search_branch",
+                    returned=session["search_results"],
+                    note="No listings found; stopping before price comparison.",
+                )
                 step = "done"
                 continue
 
@@ -202,17 +255,43 @@ def run_agent(
             session["selected_item"] = (
                 session["search_results"][0]
             )
+            trace.step(
+                "select_item",
+                inputs={"result_count": len(session["search_results"])},
+                returned=session["selected_item"],
+            )
 
             step = "compare_price"
 
         # ── Step 3: Compare prices ───────────────────────────────────────────
-
         elif step == "compare_price":
-            session["price_comparison"] = compare_prices(
-                session["selected_item"],
-                session["search_results"],
-            )
+            compare_inputs = {
+                "selected_item": session["selected_item"],
+                "matches": session["search_results"],
+            }
+            try:
+                # UNIT 4 STRETCH: Price comparison through MCP as well.
+                session["price_comparison"] = call_tool(
+                    "compare_prices", compare_inputs
+                )
+            except MCPError as exc:
+                session["error"] = (
+                    "The price comparison tool couldn't be reached through MCP. "
+                    f"Details: {exc}. Please check the MCP server and try again."
+                )
+                trace.step(
+                    "compare_prices (via MCP) error",
+                    inputs=compare_inputs,
+                    note=str(exc),
+                )
+                step = "done"
+                continue
 
+            trace.step(
+                "compare_prices (via MCP)",
+                inputs=compare_inputs,
+                returned=session["price_comparison"],
+            )
             comparison = session["price_comparison"]
 
             # STRETCH BRANCH:
@@ -220,7 +299,6 @@ def run_agent(
             # switch to the cheapest comparable listing.
             if comparison["assessment"] == "above_average":
                 cheapest_item = comparison["cheapest_item"]
-
                 if (
                     cheapest_item is not None
                     and cheapest_item["id"]
@@ -228,46 +306,76 @@ def run_agent(
                 ):
                     session["selected_item"] = cheapest_item
                     session["price_branch_taken"] = True
+                    trace.step(
+                        "above_average_branch",
+                        returned=session["selected_item"],
+                        note="Switched to cheapest comparable listing.",
+                    )
 
             step = "suggest_outfit"
 
         # ── Step 4: Suggest outfit ───────────────────────────────────────────
-
         elif step == "suggest_outfit":
+            outfit_inputs = {
+                "selected_item": session["selected_item"],
+                "wardrobe": session["wardrobe"],
+            }
             try:
                 session["outfit_suggestion"] = suggest_outfit(
                     session["selected_item"],
                     session["wardrobe"],
                 )
-
-            except ModelUnavailable:
+            except ModelUnavailable as exc:
                 session["error"] = (
                     "The model is temporarily unavailable, so I couldn't "
-                    "generate an outfit suggestion. Please try again."
+                    "generate an outfit suggestion. Please check your "
+                    "connection or API key and try again."
                 )
-
+                trace.step(
+                    "suggest_outfit error",
+                    inputs=outfit_inputs,
+                    note=str(exc),
+                )
                 step = "done"
                 continue
 
+            trace.step(
+                "suggest_outfit",
+                inputs=outfit_inputs,
+                returned=session["outfit_suggestion"],
+            )
             step = "create_fit_card"
 
         # ── Step 5: Create fit card ──────────────────────────────────────────
-
         elif step == "create_fit_card":
+            card_inputs = {
+                "outfit_suggestion": session["outfit_suggestion"],
+                "selected_item": session["selected_item"],
+            }
             try:
                 session["fit_card"] = create_fit_card(
                     session["outfit_suggestion"],
                     session["selected_item"],
                 )
-
-            except ModelUnavailable:
+            except ModelUnavailable as exc:
                 session["error"] = (
                     "The model is temporarily unavailable, so I couldn't "
-                    "create the fit card. Please try again."
+                    "create the fit card. Please check your connection "
+                    "or API key and try again."
                 )
-
+                trace.step(
+                    "create_fit_card error",
+                    inputs=card_inputs,
+                    note=str(exc),
+                )
                 step = "done"
                 continue
+
+            trace.step(
+                "create_fit_card",
+                inputs=card_inputs,
+                returned=session["fit_card"],
+            )
 
             # STRETCH FEATURE:
             # Save the selected item only when persistent memory is enabled.
