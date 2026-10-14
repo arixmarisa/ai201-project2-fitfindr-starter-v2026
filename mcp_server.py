@@ -1,3 +1,4 @@
+
 """
 Your MCP server. ← UNIT 4, MILESTONE 1
 
@@ -18,21 +19,21 @@ TODO — register one tool.
 
 Uncomment the block below and fill it in. Three things matter:
 
-  1. **The name.** Exactly what your agent will ask for.
+ 1. **The name.** Exactly what your agent will ask for.
 
-  2. **The description.** This is the part that isn't code and matters most.
-     Write it before you look at the example. You are not writing it for your
-     agent — you're writing it for an agent someone else builds, that will
-     never see your implementation. That isn't hypothetical; it's what every
-     MCP server on the registry is.
+ 2. **The description.** This is the part that isn't code and matters most.
+    Write it before you look at the example. You are not writing it for your
+    agent — you're writing it for an agent someone else builds, that will
+    never see your implementation. That isn't hypothetical; it's what every
+    MCP server on the registry is.
 
-     Two things to get right: name units and types ("price" is ambiguous,
-     "max_price, in whole dollars" isn't), and state the empty case. Last unit
-     the empty case was on your spec sheet for your loop's benefit. Here it's
-     part of a published contract.
+    Two things to get right: name units and types ("price" is ambiguous,
+    "max_price, in whole dollars" isn't), and state the empty case. Last unit
+    the empty case was on your spec sheet for your loop's benefit. Here it's
+    part of a published contract.
 
-  3. **The typed inputs.** These come straight from your Tool Inventory. If the
-     types here don't match your README, one of the two is wrong — fix it.
+ 3. **The typed inputs.** These come straight from your Tool Inventory. If the
+    types here don't match your README, one of the two is wrong — fix it.
 
 Then point your agent at it. In `run_agent()`, swap the direct call:
 
@@ -59,7 +60,8 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import search_listings as _search_listings_impl  # noqa: F401 — you'll use this below
+from tools import search_listings as _search_listings_impl
+from tools import compare_prices as _compare_prices_impl
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
 # request. Without it your terminal fills with "Processing request of type
@@ -68,22 +70,23 @@ mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
 # ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
+
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search available clothing listings using a description, optional size,
+    and optional maximum price in USD.
+
+    Returns matching listing dictionaries. If no listings match the
+    provided constraints, returns an empty list.
+    """
+    return _search_listings_impl(description, size, max_price)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 #
 # Two notes on the block above.
@@ -99,6 +102,31 @@ mcp = FastMCP("fitfindr", log_level="WARNING")
 # `max_price: float | None = None` becomes an optional number. Getting these
 # wrong is the most common reason a call is rejected.
 
+
+# ── UNIT 4 STRETCH: Second tool exposed through MCP (+1 point) ────────────────
+
+@mcp.tool()
+def compare_prices(
+    selected_item: dict,
+    matches: list[dict],
+) -> dict:
+    """
+    Compare the selected clothing item's price in USD with similar listings.
+
+    Accepts the selected item and a list of matching listing dictionaries.
+    Returns a price comparison containing the selected price, average
+    comparable price, cheapest listing, and price assessment.
+
+    If there are no comparable listings, the average comparable price
+    is None.
+    """
+    return _compare_prices_impl(
+        selected_item=selected_item,
+        matches=matches,
+    )
+
+
+# ── Start MCP server ───────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     mcp.run()
