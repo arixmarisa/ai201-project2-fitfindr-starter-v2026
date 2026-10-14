@@ -1,3 +1,4 @@
+
 """
 The three FitFindr tools.
 
@@ -152,7 +153,7 @@ Name the wardrobe pieces you use and keep the response concise and practical.
     return generate(prompt).strip()
 
 
-# ── Tool 3: create_fit_card ───────────────────────────────────────────────────
+# ── Tool 3: create_fit_card ────────────────────────────────────────────────────
 
 def create_fit_card(outfit: str, new_item: dict) -> str:
     """
@@ -176,7 +177,7 @@ Outfit idea:
 {outfit}
 
 Requirements:
-- Write only 2 to 4 sentences.
+- Write exactly 3 complete sentences.
 - Mention the item.
 - Mention its price exactly once.
 - Mention the platform exactly once.
@@ -185,6 +186,7 @@ Requirements:
 """
 
     return generate(prompt).strip()
+
 
 # ── Tool 4: compare_prices ────────────────────────────────────────────────────
 

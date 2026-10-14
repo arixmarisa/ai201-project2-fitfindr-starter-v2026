@@ -1,3 +1,4 @@
+
 """
 The one place FitFindr talks to the model.
 
@@ -36,6 +37,7 @@ import time
 
 import config
 
+
 _call_times: list[float] = []
 _session_calls = 0
 _cache_hits = 0
@@ -61,7 +63,6 @@ class ModelUnavailable(Exception):
 
 
 # ─── Cache ───────────────────────────────────────────────────────────────────
-
 
 def _cache_key(prompt: str, system: str | None, temperature: float) -> str:
     blob = json.dumps(
@@ -98,7 +99,6 @@ def clear_cache() -> int:
 
 # ─── Pacing and guards ───────────────────────────────────────────────────────
 
-
 def _wait_for_slot() -> None:
     """Sleep, if we've used up this minute's allowance."""
     now = time.monotonic()
@@ -119,7 +119,9 @@ def _wait_for_slot() -> None:
                 flush=True,
             )
         time.sleep(sleep_for)
-        _call_times[:] = [t for t in _call_times if time.monotonic() - t < 60.0]
+        _call_times[:] = [
+            t for t in _call_times if time.monotonic() - t < 60.0
+        ]
 
 
 def _check_budget() -> None:
@@ -200,23 +202,26 @@ def _record_tokens(response) -> None:
 
 # ─── The call ────────────────────────────────────────────────────────────────
 
-
 def _explain(exc: Exception) -> str:
     """Turn a provider exception into something a person can act on."""
     message = str(exc).lower()
+
     if "api key" in message or "api_key" in message or "unauthenticated" in message:
         return (
             "The model rejected your API key. Check GEMINI_API_KEY in your .env "
             "file, or create a fresh key at aistudio.google.com."
         )
+
     if "not found" in message or "404" in message:
         return (
             f"The model name '{config.MODEL}' did not resolve. If you changed "
             f"AI201_MODEL in your .env, put it back. Otherwise post in the help "
             f"channel — this is not something you caused."
         )
+
     if "connection" in message or "timeout" in message or "network" in message:
         return "Couldn't reach the model. Check your internet connection and try again."
+
     return f"Couldn't reach the model: {exc}"
 
 
@@ -293,11 +298,13 @@ def generate(
             _cache_hits += 1
             return hit
 
-    _check_budget()
-
     last_error: Exception | None = None
+
     for attempt in range(config.MAX_RETRIES):
+        # Check before every attempt so retries obey the session budget too.
+        _check_budget()
         _wait_for_slot()
+
         try:
             client = _get_client()
             _call_times.append(time.monotonic())
@@ -306,6 +313,7 @@ def generate(
             call_config = {"temperature": temperature}
             if system:
                 call_config["system_instruction"] = system
+
             kwargs = {
                 "model": config.MODEL,
                 "contents": prompt,
@@ -323,24 +331,41 @@ def generate(
         except Exception as exc:  # noqa: BLE001 — surfaced below
             last_error = exc
             message = str(exc).lower()
-            rate_limited = (
+
+            # UNIT 4 SECOND IMPROVEMENT:
+            # Retry temporary HTTP 503 service failures and existing
+            # HTTP 429 rate-limit responses.
+            retryable = (
                 "429" in message
-                or "resource" in message and "exhaust" in message
-                or "rate" in message and "limit" in message
+                or ("resource" in message and "exhaust" in message)
+                or ("rate" in message and "limit" in message)
+                or "503" in message
+                or "service unavailable" in message
             )
-            if not rate_limited:
+
+            # Invalid API keys, unsupported models, and other permanent
+            # failures still stop immediately.
+            if not retryable:
                 raise ModelUnavailable(_explain(exc)) from exc
+
+            # No further retry after the final allowed attempt.
+            if attempt == config.MAX_RETRIES - 1:
+                break
+
             backoff = _retry_delay(exc, attempt)
             print(
-                f"  [rate limit] service pushed back. Waiting {backoff:.0f}s "
-                f"(attempt {attempt + 1} of {config.MAX_RETRIES}). This is "
-                f"the limiter doing its job, not a bug.",
+                f"  [model retry] Temporary model error. "
+                f"Waiting {backoff:.0f}s "
+                f"(attempt {attempt + 1} of {config.MAX_RETRIES}).",
                 file=sys.stderr,
                 flush=True,
             )
             time.sleep(backoff)
 
-    raise RuntimeError(
-        f"Still rate limited after {config.MAX_RETRIES} attempts. Wait a "
-        f"minute and try again — your key is fine.\nLast error: {last_error}"
-    )
+    # Exhausted retries also use ModelUnavailable so the agent can handle
+    # the failure gracefully rather than displaying a traceback.
+    raise ModelUnavailable(
+        "The model is still unavailable after retrying. "
+        "Please try again later. "
+        f"Last error: {_explain(last_error)}"
+    ) from last_error
