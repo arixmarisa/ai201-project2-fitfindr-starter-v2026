@@ -1,3 +1,4 @@
+
 """
 The runs your test needs. ← UNIT 4, MILESTONE 3
 
@@ -35,6 +36,7 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
+
     # TODO: add what your criteria 3, 4 and 5 need.
     #
     # Set "criterion" to the number in criteria.md that the scenario tests.
@@ -47,6 +49,31 @@ SCENARIOS = [
     # For a fit-card criterion, you probably want the SAME query listed more
     # than once, or several different items, depending on what your criterion
     # actually says.
+
+    # ── Criterion 3: Selected item moves through session state ─────────────
+    {
+        "name": "selected item passes correctly to suggest_outfit",
+        "query": "denim jacket under $50",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+
+    # ── Criterion 4: Fit card content and length ───────────────────────────
+    {
+        "name": "fit card includes price platform and 2-4 sentences",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+
+    # ── Criterion 5: Saved style memory is available on a later run ────────
+    {
+        "name": "saved style memory loads on a second run",
+        "query": "vintage graphic tee under $30",
+        "followup_query": "denim jacket under $50",
+        "wardrobe": "empty",
+        "criterion": 5,
+    },
 ]
 
 WARDROBES = ("example", "empty")
@@ -63,4 +90,17 @@ def validate() -> list[str]:
                 f"scenario {i} has wardrobe {scenario.get('wardrobe')!r} — "
                 f"it should be one of {WARDROBES}"
             )
+        if scenario.get("criterion") == 5 and not scenario.get("followup_query"):
+            problems.append(
+                f"scenario {i} needs a followup_query for style memory"
+            )
+
+    numbered = [s.get("criterion") for s in SCENARIOS
+                if s.get("criterion") is not None]
+    for number in range(1, 6):
+        if numbered.count(number) != 1:
+            problems.append(
+                f"criterion {number} must have exactly one scenario"
+            )
+
     return problems
